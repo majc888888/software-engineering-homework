@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Flux RealismLora · 真实感图像生成</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: #f4f6fa;
+    color: #1f2329;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px;
+  }
+  .container { width: 100%; max-width: 900px; }
+  header { text-align: center; margin-bottom: 24px; }
+  header h1 { font-size: 26px; font-weight: 700; }
+  header p { color: #6b7280; margin-top: 6px; font-size: 14px; }
+  .card {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.06);
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  label { font-weight: 600; font-size: 14px; display: block; margin-bottom: 8px; }
+  textarea {
+    width: 100%;
+    min-height: 100px;
+    border: 1px solid #d8dce3;
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 14px;
+    resize: vertical;
+    font-family: inherit;
+  }
+  textarea:focus { outline: 2px solid #4f7cff; border-color: transparent; }
+  .presets { margin: 12px 0; display: flex; flex-wrap: wrap; gap: 8px; }
+  .presets button {
+    border: 1px solid #d8dce3;
+    background: #f8fafc;
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 12px;
+    cursor: pointer;
+    color: #374151;
+  }
+  .presets button:hover { background: #eef2ff; border-color: #4f7cff; color: #4f7cff; }
+  .generate-btn {
+    width: 100%;
+    padding: 14px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(135deg, #4f7cff, #7b5cf0);
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    margin-top: 10px;
+  }
+  .generate-btn:disabled { opacity: .6; cursor: not-allowed; }
+  .status { text-align: center; color: #6b7280; font-size: 13px; margin-top: 10px; min-height: 18px; }
+  .result-wrap { text-align: center; }
+  .placeholder {
+    border: 2px dashed #d8dce3;
+    border-radius: 12px;
+    padding: 60px 20px;
+    color: #9ca3af;
+    font-size: 14px;
+  }
+  #resultImg {
+    max-width: 100%;
+    border-radius: 12px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.12);
+    display: none;
+  }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 4px solid #e5e7eb;
+    border-top-color: #4f7cff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 40px auto;
+    display: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .meta { font-size: 12px; color: #6b7280; margin-top: 12px; display: none; }
+  .download-btn {
+    display: none;
+    margin-top: 12px;
+    padding: 8px 20px;
+    border-radius: 8px;
+    border: 1px solid #4f7cff;
+    color: #4f7cff;
+    background: #fff;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  #logBox {
+    background: #111827;
+    color: #9ae6b4;
+    font-family: Consolas, monospace;
+    font-size: 12px;
+    border-radius: 10px;
+    padding: 14px;
+    max-height: 180px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+  }
+  .error { color: #ef4444 !important; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>🎨 Flux RealismLora 真实感图像生成</h1>
+    <p>基于 HuggingFace Inference API · 模型：XLabs-AI/flux-RealismLora</p>
+  </header>
+
+  <div class="card">
+    <label for="prompt">提示词（Prompt，建议使用英文描述）</label>
+    <textarea id="prompt" placeholder="例：RAW photo, a close-up portrait of an elderly fisherman..."></textarea>
+    <div class="presets">
+      <button data-p="RAW photo, a close-up portrait of an elderly fisherman with weathered skin and deep wrinkles, salt-and-pepper beard, soft natural window light, shallow depth of field, 85mm lens, photorealistic, high detail">👴 老渔夫肖像</button>
+      <button data-p="RAW photo, a rainy night street in Tokyo, neon signs reflecting on wet asphalt, a person with a transparent umbrella walking away, cinematic lighting, photorealistic, 35mm film look">🌃 雨夜街道</button>
+      <button data-p="RAW photo, a steaming cup of latte with intricate latte art on a rustic wooden table, morning sunlight through a cafe window, shallow depth of field, photorealistic, ultra detailed">☕ 咖啡特写</button>
+    </div>
+    <button class="generate-btn" id="genBtn">🚀 生成图像</button>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card result-wrap">
+    <label>生成结果</label>
+    <div class="placeholder" id="placeholder">生成的图像将显示在这里</div>
+    <div class="spinner" id="spinner"></div>
+    <img id="resultImg" alt="生成结果" />
+    <div class="meta" id="meta"></div>
+    <button class="download-btn" id="dlBtn">⬇ 下载图像</button>
+  </div>
+
+  <div class="card">
+    <label>API 调用日志（成功记录）</label>
+    <div id="logBox">等待调用…</div>
+  </div>
+</div>
+
+<script>
+  const promptEl = document.getElementById("prompt");
+  const genBtn   = document.getElementById("genBtn");
+  const statusEl = document.getElementById("status");
+  const spinner  = document.getElementById("spinner");
+  const placeholder = document.getElementById("placeholder");
+  const imgEl    = document.getElementById("resultImg");
+  const metaEl   = document.getElementById("meta");
+  const dlBtn    = document.getElementById("dlBtn");
+  const logBox   = document.getElementById("logBox");
+
+  document.querySelectorAll(".presets button").forEach(btn => {
+    btn.addEventListener("click", () => { promptEl.value = btn.dataset.p; });
+  });
+
+  function log(msg, isErr = false) {
+    const time = new Date().toLocaleTimeString();
+    const line = document.createElement("div");
+    if (isErr) line.className = "error";
+    line.textContent = `[${time}] ${msg}`;
+    logBox.appendChild(line);
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+
+  genBtn.addEventListener("click", async () => {
+    const prompt = promptEl.value.trim();
+    if (!prompt) { statusEl.textContent = "请先输入提示词"; statusEl.className = "status error"; return; }
+
+    genBtn.disabled = true;
+    statusEl.className = "status";
+    statusEl.textContent = "正在调用 HuggingFace API，请稍候（模型冷启动可能需要 20-60 秒）…";
+    spinner.style.display = "block";
+    placeholder.style.display = "none";
+    imgEl.style.display = "none";
+    metaEl.style.display = "none";
+    dlBtn.style.display = "none";
+    log(`发送请求 → 提示词: ${prompt.slice(0, 80)}${prompt.length > 80 ? "…" : ""}`);
+
+    const t0 = performance.now();
+    try {
+      const resp = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      const data = await resp.json();
+      const secs = ((performance.now() - t0) / 1000).toFixed(2);
+
+      if (!resp.ok) {
+        log(`调用失败：${data.error}`, true);
+        statusEl.textContent = "生成失败，请查看日志";
+        statusEl.className = "status error";
+      } else {
+        imgEl.src = data.image;
+        imgEl.style.display = "inline-block";
+        metaEl.style.display = "block";
+        metaEl.textContent = `模型：${data.model} ｜ 推理通道：${data.provider} ｜ 耗时：${data.elapsed}s`;
+        dlBtn.style.display = "inline-block";
+        statusEl.textContent = "✅ 生成成功！";
+        log(`API 调用成功（HTTP 200），前端总耗时 ${secs}s，图像已返回`);
+      }
+    } catch (e) {
+      log(`网络错误：${e.message}`, true);
+      statusEl.textContent = "网络错误，请确认后端服务已启动";
+      statusEl.className = "status error";
+    } finally {
+      spinner.style.display = "none";
+      genBtn.disabled = false;
+    }
+  });
+
+  dlBtn.addEventListener("click", () => {
+    const a = document.createElement("a");
+    a.href = imgEl.src;
+    a.download = "flux-generated.png";
+    a.click();
+  });
+</script>
+</body>
+</html>
